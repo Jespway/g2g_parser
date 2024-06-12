@@ -1,45 +1,66 @@
 from playwright.sync_api import sync_playwright
 from bs4 import BeautifulSoup
 
-
-def run(playwright):
+def run(playwright, url):
     browser = playwright.chromium.launch(headless=True)
     page = browser.new_page()
-    page.goto("https://www.g2g.com/trending/game-coins")
+    page.goto(url)
     page.wait_for_timeout(5000)  # Ожидание загрузки контента
     content = page.content()
     browser.close()
     return content
 
+def get_soup_from_url(playwright, url):
+    html = run(playwright, url)
+    soup = BeautifulSoup(html, 'html.parser')
+    return soup
+
+def get_game_info(game_div):
+    # Извлечение ссылки на игру
+    link_tag = game_div.find('a', class_='g-card-no-deco')
+    game_link = link_tag['href'] if link_tag else None
+
+    # Извлечение названия игры
+    title_tag = game_div.find('div', class_='ellipsis-2-lines')
+    game_title = title_tag.get_text(strip=True) if title_tag else None
+
+    # Извлечение количества предложений
+    offers_tag = game_div.find('div', class_='g-chip-counter dark')
+    offers_count = offers_tag.get_text(strip=True) if offers_tag else None
+
+    return {
+        'link': game_link,
+        'title': game_title,
+        'offers': offers_count
+    }
+
+def scrape_all_pages(base_url, total_pages):
+    games = []
+    
     with sync_playwright() as playwright:
-        html = run(playwright)
-        with open('index.html', 'w', encoding='utf-8') as file:
-            file.write(html)
+        for page_num in range(1, total_pages + 1):
+            url = f"{base_url}?page={page_num}"
+            soup = get_soup_from_url(playwright, url)
+            game_divs = soup.find_all('div', class_='col-sm-4 col-md-3 col-12')
 
-def get_soup():
-    # Чтение сохраненного HTML-кода из файла
-    with open('index.html', 'r', encoding='utf-8') as file:
-        html_content = file.read()
+            for game_div in game_divs:
+                game_info = get_game_info(game_div)
+                games.append(game_info)
 
-    # Создание объекта BeautifulSoup для парсинга HTML
-    soup = BeautifulSoup(html_content, 'html.parser')
-
-    # Пример: Извлечение определенного блока контента по классу или идентификатору
-    specific_div = soup.find_all('div', {'class': 'col-sm-4 col-md-3 col-12'})
-    for div in specific_div:
-        print(div)
-
+    return games
 
 def main():
-    # soup = get_soup(url=url_themes)
-    # themes = get_themes(soup=soup)
-    
-    # soup = get_soup(url='https://www.lego.com/en-us/themes/star-wars')
-    # print(get_toys_pages(soup=soup))
-    
-    soup = get_soup()
-    # get_toys_values(soup=soup)
+    base_url = "https://www.g2g.com/trending/game-coins"
+    total_pages = 8  # Замените на общее количество страниц
 
+    games = scrape_all_pages(base_url, total_pages)
 
-if __name__== '__main__':
+    # Вывод информации
+    for game in games:
+        print(f"Ссылка на игру: https://www.g2g.com"{game['link']}")
+        print(f"Название игры: {game['title']}")
+        print(f"Количество предложений: {game['offers']}")
+        print()
+
+if __name__ == '__main__':
     main()
